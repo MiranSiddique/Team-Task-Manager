@@ -127,3 +127,53 @@ class ProjectJoinViewTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['role'], 'admin')
         self.assertTrue(Membership.objects.filter(user=self.owner, project=self.private_project, role='admin').exists())
+
+
+class ProjectAssigneesViewTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            username='owner',
+            email='owner@example.com',
+            password='testpass123'
+        )
+        self.admin_member = User.objects.create_user(
+            username='admin_member',
+            email='admin@example.com',
+            password='testpass123'
+        )
+        self.regular_member = User.objects.create_user(
+            username='regular_member',
+            email='member@example.com',
+            password='testpass123'
+        )
+        self.project = Project.objects.create(
+            name='Test Project',
+            description='For testing assignees',
+            owner=self.owner,
+            is_private=False,
+        )
+        Membership.objects.create(user=self.owner, project=self.project, role='admin')
+        Membership.objects.create(user=self.admin_member, project=self.project, role='admin')
+        Membership.objects.create(user=self.regular_member, project=self.project, role='member')
+
+    def test_get_assignees_list_for_project(self):
+        self.client.force_authenticate(user=self.owner)
+        
+        response = self.client.get(f'/api/projects/{self.project.id}/assignees/', format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)  # owner + 2 members
+        
+        usernames = [user['username'] for user in response.data]
+        self.assertIn('owner', usernames)
+        self.assertIn('admin_member', usernames)
+        self.assertIn('regular_member', usernames)
+
+    def test_member_can_get_assignees_list(self):
+        self.client.force_authenticate(user=self.regular_member)
+        
+        response = self.client.get(f'/api/projects/{self.project.id}/assignees/', format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)

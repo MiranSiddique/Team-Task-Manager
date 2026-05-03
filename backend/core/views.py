@@ -44,11 +44,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def assignees(self, request, pk=None):
         """Return list of users available to assign tasks to (project owner + members)."""
         project = self.get_object()
-        # Include project owner and all project members
-        member_users = User.objects.filter(
-            memberships__project=project
-        ) | User.objects.filter(id=project.owner_id)
-        member_users = member_users.distinct().order_by('username')
+        # Get all users who are members of this project or are the owner
+        member_user_ids = list(
+            Membership.objects.filter(project=project).values_list('user_id', flat=True)
+        )
+        member_user_ids.append(project.owner_id)
+        member_users = User.objects.filter(id__in=member_user_ids).distinct().order_by('username')
         from .serializers import UserSerializer
         serializer = UserSerializer(member_users, many=True)
         return Response(serializer.data)

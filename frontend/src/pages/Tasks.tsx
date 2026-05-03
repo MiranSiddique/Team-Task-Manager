@@ -51,9 +51,11 @@ export default function Tasks() {
   const loadAssignees = async (projectId: string) => {
     try {
       const response = await apiClient.get(`/projects/${projectId}/assignees/`);
+      console.log('Loaded assignees:', response.data);
       setProjectAssignees(response.data);
-    } catch (err) {
-      console.error('Failed to load assignees:', err);
+    } catch (err: any) {
+      console.error('Failed to load assignees:', err.response?.data || err.message);
+      setProjectAssignees([]);
     }
   };
 
