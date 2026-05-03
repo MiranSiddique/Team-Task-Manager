@@ -26,9 +26,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -117,4 +117,11 @@ else:
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
+        "https://team-task-managerfe-production.up.railway.app"
     ]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://team-task-managerfe-production.up.railway.app"
+]
+
+CORS_ALLOW_CREDENTIALS = True
