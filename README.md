@@ -36,6 +36,7 @@ cd backend
 python -m venv .venv
 source .venv/Scripts/activate  # or on Linux/Mac: source .venv/bin/activate
 pip install -r ../requirements.txt
+python manage.py makemigrations core
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8000
 ```
@@ -61,6 +62,68 @@ docker-compose up --build
 This starts:
 - Django backend at `http://localhost:8000`
 - PostgreSQL at `localhost:5432`
+
+## Railway Deployment
+
+This app is configured for production deployment on [Railway](https://railway.app) at https://team-task-managerfe-production.up.railway.app/ . Follow these steps:
+
+### Prerequisites
+- GitHub repository connected to Railway
+- Railway project created
+
+### 1. Deploy Backend (Web Service)
+
+1. Create a new **Web Service** in Railway from your GitHub repo.
+2. Set the build and deploy configuration:
+   - **Root Directory**: `.` (repo root)
+   - **Builder**: Dockerfile
+   - **Dockerfile Path**: `backend/Dockerfile`
+3. Add environment variables:
+   - `SECRET_KEY`: Generate a strong key (e.g., `django-insecure-...`)
+   - `DEBUG`: `0`
+   - `DJANGO_ALLOWED_HOSTS`: `your-backend-domain.up.railway.app,.up.railway.app,localhost,127.0.0.1`
+   - `CORS_ALLOWED_ORIGINS`: `https://your-frontend-domain.up.railway.app`
+4. Add PostgreSQL plugin to the service (Railway will auto-set `DATABASE_URL`).
+5. Deploy and wait for the service to be healthy.
+
+### 2. Deploy Frontend (Static Site)
+
+1. Create a new **Static Site** service in Railway from the same GitHub repo.
+2. Set the build configuration:
+   - **Root Directory**: `frontend`
+   - **Builder**: Railpack (or default)
+   - **Build Command**: `npm run build`
+   - **Publish Directory**: `dist`
+3. Add environment variable:
+   - `VITE_API_BASE_URL`: `https://your-backend-domain.up.railway.app/api`
+4. Deploy and wait for it to be healthy.
+
+### 3. Verify Deployment
+
+- Open the frontend Railway URL.
+- Register a new account.
+- Verify login and dashboard load.
+- Check browser Network tab for successful API calls to your backend domain.
+
+### Troubleshooting
+
+**"Invalid HTTP_HOST header"** error:
+- Ensure `DJANGO_ALLOWED_HOSTS` includes your backend domain exactly as shown in the error.
+- Redeploy the backend after updating.
+
+**"Relation does not exist"** error:
+- Run migrations in your local backend: `python manage.py makemigrations core && python manage.py migrate`
+- Commit and push migration files to GitHub.
+- Redeploy the backend (migrations will run automatically).
+
+**CORS errors on frontend**:
+- Ensure `CORS_ALLOWED_ORIGINS` on the backend includes your frontend domain.
+- Ensure `VITE_API_BASE_URL` on the frontend points to your backend domain (with `/api` suffix).
+- Redeploy both services after changes.
+
+**Login fails / JWT errors**:
+- Verify `SECRET_KEY` is set on the backend (same value for all deployments).
+- Check that `DATABASE_URL` is set and the Postgres service is healthy.
 
 ## API Endpoints
 
@@ -129,6 +192,8 @@ Current test coverage:
 - Short password validation
 - Duplicate username handling
 
+**Note**: Tests use SQLite in-memory DB. Migrations are applied automatically during test setup.
+
 ## Roadmap
 
 - [ ] Task comments and activity log
@@ -139,21 +204,15 @@ Current test coverage:
 - [ ] Mobile app
 - [ ] WebSocket for real-time updates
 
-## Deployment
+## Production Ready Features
 
-### On Heroku/Cloud
-
-1. Set environment variables in `.env`
-2. Configure database (PostgreSQL)
-3. Run migrations: `python manage.py migrate`
-4. Collect static files: `python manage.py collectstatic`
-5. Start server
-
-### Docker
-
-```bash
-docker-compose up -d
-```
+✅ Railway deployment (see [Railway Deployment](#railway-deployment) section)  
+✅ Docker Compose setup with PostgreSQL  
+✅ JWT authentication with token refresh  
+✅ CORS configuration for multi-domain deployments  
+✅ Static file serving with WhiteNoise  
+✅ Gunicorn production server  
+✅ Database migrations  
 
 ## Development Notes
 

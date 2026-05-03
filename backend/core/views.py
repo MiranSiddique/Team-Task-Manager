@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from .models import Project, Task, Membership
 from .serializers import ProjectSerializer, TaskSerializer, MembershipSerializer
 from .permissions import IsProjectMember, IsProjectAdmin
@@ -39,10 +40,26 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer = MembershipSerializer(memberships, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated, IsProjectMember])
+    def assignees(self, request, pk=None):
+        """Return list of users available to assign tasks to (project owner + members)."""
+        project = self.get_object()
+        # Include project owner and all project members
+        member_users = User.objects.filter(
+            memberships__project=project
+        ) | User.objects.filter(id=project.owner_id)
+        member_users = member_users.distinct().order_by('username')
+        from .serializers import UserSerializer
+        serializer = UserSerializer(member_users, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def join(self, request, pk=None):
-        """Allow the current user to join a project."""
-        project = self.get_object()
+        """Allow the current user to join a public project by id.
+
+        Private projects cannot be joined directly unless the requester is the owner.
+        """
+        project = get_object_or_404(Project, pk=pk)
 
         if project.owner_id == request.user.id:
             membership, _ = Membership.objects.get_or_create(
@@ -51,6 +68,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 defaults={'role': 'admin'},
             )
             return Response(MembershipSerializer(membership).data)
+
+        if project.is_private:
+            return Response(
+                {'error': 'Private projects cannot be joined directly'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         membership, _ = Membership.objects.get_or_create(
             user=request.user,
@@ -128,7 +151,19 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Task.objects.filter(project__in=user_projects).distinct()
 
     def perform_create(self, serializer):
-        """Set created_by to the current user."""
+        """Set created_by to the current user and validate assignee is a project member."""
+        task_data = serializer.validated_data
+        project = task_data.get('project')
+        assignee = task_data.get('assignee')
+        
+        # Validate assignee is a project member or owner
+        if assignee:
+            if project.owner_id != assignee.id:
+                membership = Membership.objects.filter(project=project, user=assignee).first()
+                if not membership:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'assignee_id': 'User is not a member of the project'})
+        
         serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated, IsProjectMember])

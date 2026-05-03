@@ -21,11 +21,18 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     assignee = UserSerializer(read_only=True)
+    assignee_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        source='assignee'
+    )
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
 
     class Meta:
         model = Task
-        fields = ('id', 'title', 'description', 'project', 'assignee', 'status', 'priority', 'due_date', 'created_by', 'created_at')
+        fields = ('id', 'title', 'description', 'project', 'assignee', 'assignee_id', 'status', 'priority', 'due_date', 'created_by', 'created_at')
 
 
 class MembershipSerializer(serializers.ModelSerializer):

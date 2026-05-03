@@ -8,16 +8,22 @@ interface Project {
   name: string;
 }
 
+interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
 interface Task {
   id: number;
   title: string;
   description: string;
   project: number;
-  assignee: { id: number; username: string; email: string } | null;
+  assignee: User | null;
   status: 'todo' | 'in_progress' | 'done';
   priority: number;
   due_date: string | null;
-  created_by: { id: number; username: string; email: string } | null;
+  created_by: User | null;
   created_at: string;
 }
 
@@ -30,16 +36,26 @@ const statusLabels: Record<Task['status'], string> = {
 export default function Tasks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectAssignees, setProjectAssignees] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Task['status']>('all');
-  const [form, setForm] = useState({ title: '', description: '', project: '', priority: '3', due_date: '' });
+  const [form, setForm] = useState({ title: '', description: '', project: '', priority: '3', due_date: '', assignee_id: '' });
   const [submitting, setSubmitting] = useState(false);
 
   const activeProjectId = searchParams.get('project') || form.project;
 
   const projectMap = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+
+  const loadAssignees = async (projectId: string) => {
+    try {
+      const response = await apiClient.get(`/projects/${projectId}/assignees/`);
+      setProjectAssignees(response.data);
+    } catch (err) {
+      console.error('Failed to load assignees:', err);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -60,6 +76,7 @@ export default function Tasks() {
         if (!searchParams.get('project')) {
           setSearchParams({ project: firstProjectId });
         }
+        await loadAssignees(firstProjectId);
       }
     } catch (requestError) {
       console.error(requestError);
@@ -75,7 +92,11 @@ export default function Tasks() {
 
   useEffect(() => {
     if (searchParams.get('project') && searchParams.get('project') !== form.project) {
-      setForm((current) => ({ ...current, project: searchParams.get('project') || current.project }));
+      const projectId = searchParams.get('project') || '';
+      setForm((current) => ({ ...current, project: projectId }));
+      if (projectId) {
+        loadAssignees(projectId);
+      }
     }
   }, [searchParams, form.project]);
 
@@ -97,18 +118,24 @@ export default function Tasks() {
     setError('');
 
     try {
-      await apiClient.post('/tasks/', {
+      const payload: any = {
         title: form.title,
         description: form.description,
         project: Number(form.project),
         priority: Number(form.priority),
         due_date: form.due_date || null,
-      });
-      setForm((current) => ({ ...current, title: '', description: '', priority: '3', due_date: '' }));
+      };
+
+      if (form.assignee_id) {
+        payload.assignee_id = Number(form.assignee_id);
+      }
+
+      await apiClient.post('/tasks/', payload);
+      setForm((current) => ({ ...current, title: '', description: '', priority: '3', due_date: '', assignee_id: '' }));
       await loadData();
     } catch (requestError: any) {
       console.error(requestError);
-      setError(requestError.response?.data?.detail || 'Could not create task.');
+      setError(requestError.response?.data?.detail || requestError.response?.data?.assignee_id?.[0] || 'Could not create task.');
     } finally {
       setSubmitting(false);
     }
@@ -195,6 +222,21 @@ export default function Tasks() {
                 </select>
               </label>
             </div>
+
+            <label className="field">
+              <span>Assign to (optional)</span>
+              <select
+                value={form.assignee_id}
+                onChange={(event) => setForm((current) => ({ ...current, assignee_id: event.target.value }))}
+              >
+                <option value="">Unassigned</option>
+                {projectAssignees.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="field">
               <span>Due date</span>

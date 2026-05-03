@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
+from .models import Project, Membership
 
 User = get_user_model()
 
@@ -69,3 +70,60 @@ class TokenViewTestCase(TestCase):
         }
         response = self.client.post(self.token_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ProjectJoinViewTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            username='owner',
+            email='owner@example.com',
+            password='testpass123'
+        )
+        self.member = User.objects.create_user(
+            username='member',
+            email='member@example.com',
+            password='testpass123'
+        )
+        self.public_project = Project.objects.create(
+            name='Public project',
+            description='Open to all authenticated users',
+            owner=self.owner,
+            is_private=False,
+        )
+        self.private_project = Project.objects.create(
+            name='Private project',
+            description='Invite-only',
+            owner=self.owner,
+            is_private=True,
+        )
+        Membership.objects.create(user=self.owner, project=self.public_project, role='admin')
+        Membership.objects.create(user=self.owner, project=self.private_project, role='admin')
+        self.join_url_public = f'/api/projects/{self.public_project.id}/join/'
+        self.join_url_private = f'/api/projects/{self.private_project.id}/join/'
+
+    def test_authenticated_user_can_join_public_project(self):
+        self.client.force_authenticate(user=self.member)
+
+        response = self.client.post(self.join_url_public, {}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['role'], 'member')
+        self.assertTrue(Membership.objects.filter(user=self.member, project=self.public_project).exists())
+
+    def test_authenticated_user_cannot_join_private_project_directly(self):
+        self.client.force_authenticate(user=self.member)
+
+        response = self.client.post(self.join_url_private, {}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Membership.objects.filter(user=self.member, project=self.private_project).exists())
+
+    def test_owner_can_call_join_and_keeps_admin_membership(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(self.join_url_private, {}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['role'], 'admin')
+        self.assertTrue(Membership.objects.filter(user=self.owner, project=self.private_project, role='admin').exists())
