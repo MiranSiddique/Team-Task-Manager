@@ -194,8 +194,12 @@ export default function Tasks() {
                 <select
                   value={form.project}
                   onChange={(event) => {
-                    setForm((current) => ({ ...current, project: event.target.value }));
-                    setSearchParams({ project: event.target.value });
+                    const newProjectId = event.target.value;
+                    setForm((current) => ({ ...current, project: newProjectId }));
+                    setSearchParams({ project: newProjectId });
+                    if (newProjectId) {
+                      loadAssignees(newProjectId);
+                    }
                   }}
                   required
                 >
